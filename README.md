@@ -9,3 +9,7 @@ find_frequency/find_freq.py
         Find CPU frequency
 sysinfo.py
         Collect a bunch of system information
+reset_to_bios.py
+	Reset itself to BIOS menu
+lpi_disable.py
+	Disable Power Management Low Power Idle (PM LPI)
