@@ -17,3 +17,6 @@ Reset itself to BIOS menu
 Disable Power Management Low Power Idle (PM LPI)
 ### sudo_user_create.sh
 Create a sudoer with home directory
+### ecc_cal.py
+Calculate SECDED ECC byte of a 64bit-data.
+This is used to debug DRAM ECC issue
