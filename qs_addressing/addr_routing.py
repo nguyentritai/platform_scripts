@@ -152,7 +152,7 @@ hnf_addr_hash_2_xy_snf_mode1 = {0: 0x01, 1: 0x21, 2: 0x02, 3: 0x22,
 		                 12: 0x53, 13: 0x73, 14: 0x54, 15: 0x74} 
 
 mcu_mask_snf_mode2 = [0x10, 0xf0, 0x0f]
-hnf_addr_hash_2_xy_mode2 = {0: 0x01, 1: 0x21, 2: 0x51, 3: 0x71,
+hnf_addr_hash_2_xy_snf_mode2 = {0: 0x01, 1: 0x21, 2: 0x51, 3: 0x71,
 	                 4: 0x02, 5: 0x22, 6: 0x52, 7: 0x72,
 	                 8: 0x03, 9: 0x23, 10: 0x53, 11: 0x73,
 	                 12: 0x04, 13: 0x24, 14: 0x54, 15: 0x74} 
@@ -187,6 +187,7 @@ def steer(sa):
   for i in range(len(HNF32_SELECT)):
       addr_hash |= xor_div(sa & HNF32_SELECT[i], 64) << i
   print ('addr hash=0b{addr_hash:05b} '.format(**locals()))
+
   hnf_pair_select_id = addr_hash & 0xF 
   cal = (addr_hash & 0x10) >> 4
   if mcu_mask in mcu_mask_snf_mode1:
@@ -234,17 +235,17 @@ def mc_addr_inf(ma):
   '''
   Hashing enabled && mcu > 1, strip out SA based on the number of MCUs using 16 HN-Fs:
   1 None
-  2 [7]
-  4 [8, 7]
+  2 [9]
+  4 [9, 8]
   8 [9, 8, 7]
   '''
   num_mc = popcount(mcu_mask)
   if num_mc == 1:
     lnr_addr = ma
   elif num_mc == 2:
-    lnr_addr = (((ma >> (7 + 1))) << 7) | (ma & ((1 << 7) - 1))
+    lnr_addr = (((ma >> (9 + 1))) << 9) | (ma & ((1 << 9) - 1))
   elif num_mc == 4:
-    lnr_addr = (((ma >> (8 + 1))) << 7) | (ma & ((1 << 7) - 1))
+    lnr_addr = (((ma >> (9 + 1))) << 8) | (ma & ((1 << 8) - 1))
   elif num_mc == 8:
     lnr_addr = (((ma >> (9 + 1))) << 7) | (ma & ((1 << 7) - 1))
 
