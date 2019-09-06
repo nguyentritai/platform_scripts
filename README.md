@@ -20,3 +20,5 @@ Create a sudoer with home directory
 ### ecc_cal.py
 Calculate SECDED ECC byte of a 64bit-data.
 This is used to debug DRAM ECC issue
+### aarch64_sys_reg
+Dump AARCH64 system register from user space
