@@ -1,0 +1,43 @@
+Key:
+-------------------------------------------------------------------------------
+1. View key in PEM format
+openssl pkey -in key.pub.pem -pubin -text
+
+2. View key in DER format
+openssl pkey -in key.pub.der -pubin -inform der -text
+
+3. Generate public key from private key
+openssl rsa -in mykey.pem -pubout > mykey.pub
+
+4. Convert key from PEM to DER format
+openssl rsa -in key.pub.pem -pubin -outform DER -out key.pub.der
+
+5. Generate key pair
+openssl genrsa -out ./test_privk_rsa.pem 2048
+openssl rsa -in ./test_privk_rsa.pem -out ./test_pk_rsa.pem -pubout
+
+6. Sign an image
+openssl dgst -sha256 -sign test_privk_rsa.pem -out image.sig image.img
+
+7. Verify an image with an signature
+openssl dgst -sha256 -verify key.pub.pem -signature image.sig image.img
+
+Cert:
+-------------------------------------------------------------------------------
+1. View cert DER format:
+openssl x509 -in tos_fw_content.crt -inform der -text -noout
+
+2. View cert PEM format:
+openssl x509 -in tos_fw_content.crt -text -noout
+
+3. Convert cert from DER to PEM format
+openssl x509 -in bl2_content.crt -inform der -outform pem -out bl2_content.crt.pem
+
+4. ANS1 decode
+openssl asn1parse -i -in bl2_content.crt.pem
+
+5. Extract data from an ANS1 offset
+For example, in bl2_content.crt.pem ans1 decoded output, the signature offset is
+at 874 (BIT STRING at the end)
+
+openssl asn1parse -in bl2_content.crt.pem -strparse 874 -out bl2_content_cert.sig
