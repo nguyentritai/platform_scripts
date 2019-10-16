@@ -29,8 +29,14 @@ row_bits=16
 bank_bits=4
 rank_bits=1
 
-mcu_mask=0xFF
+mcu_mask=0x77
 bank_hashing=1
+
+# for 6 mcu, only works with per MCU capacity 16GB
+top_addr_bits0 = 28
+top_addr_bits1 = 35 
+top_addr_bits2 = 36
+inv_top_addr_bits = 0
 
 '''
 DV: Mesh programming for HNF hashing
@@ -162,6 +168,9 @@ xy_2_hnfpair = {0x01: 0, 0x21: 1, 0x51: 2, 0x71: 3,
 		0x03: 8, 0x23: 9, 0x53: 10, 0x73: 11,
 		0x04: 12, 0x24: 13, 0x54: 14, 0x74: 15}
 
+addrhash_2_mcu = dict()
+snfhash_2_mcu = dict()
+
 def popcount(i):
     i = i - ((i >> 1) & 0x55555555)
     i = (i & 0x33333333) + ((i >> 2) & 0x33333333)
@@ -177,6 +186,77 @@ def xor_div(input, len):
     return xor_4b[input]
   len >>= 1
   return xor_div(input & ((1 << len) - 1), len) ^ xor_div(input >> len, len)
+
+def init_mcu_to_hnf():
+  global mcu_mask
+  global addrhash_2_mcu
+  global snfhash_2_mcu
+
+  '6 channels MCU selected is calculated by mcu_calc_6snf'
+  if popcount(mcu_mask) == 6:
+    if mcu_mask == 0x77:
+      snfhash_2_mcu = {0:0, 1:2, 2:1, 3:4, 4:6, 5:5}
+    elif mcu_mask == 0xBB:
+      snfhash_2_mcu = {0:0, 1:1, 2:3, 3:4, 4:5, 5:7}
+    elif mcu_mask == 0xDD:
+      snfhash_2_mcu = {0:0, 1:2, 2:3, 3:4, 4:6, 5:7}
+    elif mcu_mask == 0xEE:
+      snfhash_2_mcu = {0:1, 1:2, 2:3, 3:5, 4:6, 5:7}
+    return
+
+  if mcu_mask == 0x01:
+    for addrhash in range(0x00, 0x20):
+      addrhash_2_mcu[addrhash] = 0
+    return 
+
+  if mcu_mask == 0x10:
+    for addrhash in range(0x00, 0x20):
+      addrhash_2_mcu[addrhash] = 4
+    return 
+
+  if mcu_mask == 0x11:
+    mcu_2_addrhash = {
+      0:[0x00, 0x01, 0x10, 0x11, 0x04, 0x05, 0x14, 0x15, 0x02, 0x03, 0x12, 0x13, 0x06, 0x07, 0x16, 0x17],
+      4:[0x08, 0x09, 0x18, 0x19, 0x0a, 0x0b, 0x1a, 0x1b, 0x0c, 0x0d, 0x1c, 0x1d, 0x0e, 0x0f, 0x1e, 0x1f]
+    }
+  elif mcu_mask == 0x33:
+    mcu_2_addrhash = {
+      0:[0x00, 0x01, 0x10, 0x11, 0x02, 0x03, 0x12, 0x13],
+      1:[0x04, 0x05, 0x14, 0x15, 0x06, 0x07, 0x16, 0x17],
+      4:[0x08, 0x09, 0x18, 0x19, 0x0a, 0x0b, 0x1a, 0x1b],
+      5:[0x0c, 0x0d, 0x1c, 0x1d, 0x0e, 0x0f, 0x1e, 0x1f]
+    }
+  elif mcu_mask == 0xff:
+    mcu_2_addrhash = {
+      0:[0x00, 0x01, 0x10, 0x11],
+      1:[0x04, 0x05, 0x14, 0x15],
+      2:[0x02, 0x03, 0x12, 0x13],
+      3:[0x06, 0x07, 0x16, 0x17],
+      4:[0x08, 0x09, 0x18, 0x19],
+      5:[0x0c, 0x0d, 0x1c, 0x1d],
+      6:[0x0a, 0x0b, 0x1a, 0x1b],
+      7:[0x0e, 0x0f, 0x1e, 0x1f]
+    }
+
+  for mcu,l in mcu_2_addrhash.items():
+    for addrhashs in l:
+      for addrhash in range(0x00, 0x20):
+        if addrhash == addrhashs:
+          addrhash_2_mcu[addrhash] = mcu
+  
+  for num in range(0, 32):
+    print ('addrhash {addrhash:02x} <--> mcu {mcu:01d}'.format(addrhash=num, mcu=addrhash_2_mcu[num]))
+
+def extract(val, pos, width = 1):
+  return (val >> pos) & ((1 << width) - 1)
+
+def snf_hash_calc_6mcu(sa):
+  # SN = { ADDR[10:8] + ADDR[13:11] + ADDR[16:14] + ((top_addr_bit2<<2) | (top_addr_bit1<<1) | top_addr_bit0) } % 6
+  # For 6-MCU, top_addr_bit2 can be optionally inverted
+  snf = extract(sa, 8, 3) + extract(sa, 11, 3) + extract(sa, 14, 3)
+  snf += ((extract(sa, top_addr_bits2) ^ inv_top_addr_bits) << 2) | (extract(sa, top_addr_bits1) << 1) | extract(sa, top_addr_bits0)
+  snf %= 6
+  return snf
 
 def steer(sa):
   '''
@@ -203,6 +283,13 @@ def steer(sa):
   hnf_pair_id = xy_2_hnfpair[xy] 
   print ('hnf pair id={hnf_pair_id:01d} cal={cal:01d} ({xp:01d},{yp:01d})'.format(**locals()))
   print ('HNF Selected: [x, y, port, cal_mode] = [{xp:01d}, {yp:01d}, 1, {cal:01d}]'.format(**locals()))
+
+  snf_hash = 0
+  if popcount(mcu_mask) == 6:
+    snf_hash = snf_hash_calc_6mcu(sa)
+    print ('MCU Selected(hash {hash:01d}): {mcu:01d}'.format(hash=snf_hash, mcu=snfhash_2_mcu[snf_hash]))
+  else:
+    print ('MCU Selected: {mcu:01d}'.format(mcu=addrhash_2_mcu[addr_hash]))
 
 def sa2ma(sa):
   """
@@ -231,6 +318,11 @@ def set_bit32(cur, start, count):
     v |= (1 << i)
   return v
 
+def cut_addr_bit(ma, bit):
+  msb = (ma & ~((1 << (bit + 1)) - 1))
+  lsb = ma & ((1 << bit) - 1)
+  return (msb >> 1) | lsb
+
 def mc_addr_inf(ma):
   '''
   Hashing enabled && mcu > 1, strip out SA based on the number of MCUs using 16 HN-Fs:
@@ -246,6 +338,10 @@ def mc_addr_inf(ma):
     lnr_addr = (((ma >> (9 + 1))) << 9) | (ma & ((1 << 9) - 1))
   elif num_mc == 4:
     lnr_addr = (((ma >> (9 + 1))) << 8) | (ma & ((1 << 8) - 1))
+  elif num_mc == 6:
+    lnr_addr = cut_addr_bit(ma, top_addr_bits2) 
+    lnr_addr = cut_addr_bit(lnr_addr, top_addr_bits1) 
+    lnr_addr = cut_addr_bit(lnr_addr, top_addr_bits0) 
   elif num_mc == 8:
     lnr_addr = (((ma >> (9 + 1))) << 7) | (ma & ((1 << 7) - 1))
 
@@ -321,6 +417,7 @@ def main():
   print ('---------------------------------------')
   print ('Configuration: mcu_mask={mcu_mask:02x} Bank hashing={bank_hashing:01d}'.format(mcu_mask=mcu_mask, bank_hashing=bank_hashing))
   sa = sys.argv[1]
+  init_mcu_to_hnf()
   ma = sa2ma(int(sa, 16))
   print ('system addr: {sa:s} memory addr: {ma:010x}'.format(**locals()))
   mc_addr_inf(ma)
