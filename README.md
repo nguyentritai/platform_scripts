@@ -26,3 +26,6 @@ Dump AARCH64 system register from user space
 #### atf_extract_image_hash.sh ####
 Extract Binary Image (BL1/BL2/BL31/BL32) SHA256 Hash digest from BLx
 content certificate.
+### License checker ####
+header_license_checker
+Check if there's proper file license header as per desired pattern
