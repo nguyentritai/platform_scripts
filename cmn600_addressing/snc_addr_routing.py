@@ -29,7 +29,7 @@ row_bits=16
 bank_bits=4
 rank_bits=1
 
-mcu_mask=0x77
+mcu_mask=0xFF
 bank_hashing=1
 
 # for 6 mcu, only works with per MCU capacity 16GB
@@ -37,6 +37,10 @@ top_addr_bits0 = 28
 top_addr_bits1 = 35 
 top_addr_bits2 = 36
 inv_top_addr_bits = 0
+
+# sub-numa configurations
+# 1:monolithic 2:hemisphere 4:quadrant
+snc=4
 
 '''
 DV: Mesh programming for HNF hashing
@@ -139,23 +143,54 @@ Address 	Address Hash	HNF Selected [X,Y,P,Z]
 0x8000_07c0	0b11110		[5,4,1,1]	[7,4,0]
 '''
 HNF32_SELECT = [
-#               48......40......32......24......16.......8.......0
-#                |       |       |       |       |       |       |
-                0b010000100001000010000100001000010000100001000000, # select[0]
-                0b100001000010000100001000010000100001000010000000, # select[1]
-                0b000010000100001000010000100001000010000100000000, # select[2]
-                0b000100001000010000100001000010000100001000000000, # select[3]
-                0b001000010000100001000010000100001000010000000000, # select[4]
-               ]
+# 48......40......32......24......16.......8.......0
+#  |       |       |       |       |       |       |
+  0b010000100001000010000100001000010000100001000000, # select[0]
+  0b100001000010000100001000010000100001000010000000, # select[1]
+  0b000010000100001000010000100001000010000100000000, # select[2]
+  0b000100001000010000100001000010000100001000000000, # select[3]
+  0b001000010000100001000010000100001000010000000000, # select[4]
+]
+'''
+SNC with hemisphere (east-west) split
+  select [0] = (6^10^14^...^46) 
+  select [1] = (7^11^15^...^47)
+  select [2] = (8^12^16^...^44)
+  select [3] = (9^13^17^...^45)
+'''
+HNF16_SELECT = [
+# 48......40......32......24......16.......8.......0
+#  |       |       |       |       |       |       |
+  0b010001000100010001000100010001000100010001000000, # select[0]
+  0b100010001000100010001000100010001000100010000000, # select[1]
+  0b000100010001000100010001000100010001000100000000, # select[2]
+  0b001000100010001000100010001000100010001000000000  # select[3]
+]
+'''
+SNC with quadrant split
+  select [0] = (6^9^12^...^45)
+  select [1] = (7^10^13^...^46)
+  select [2] = (8^11^14^...^47)
+'''
+HNF8_SELECT = [
+# 48......40......32......24......16.......8.......0
+#  |       |       |       |       |       |       |
+  0b001001001001001001001001001001001001001001000000, # select[0]
+  0b010010010010010010010010010010010010010010000000, # select[1]
+  0b100100100100100100100100100100100100100100000000  # select[2]
+]
+
+
+HNF_SELECT=HNF32_SELECT
 
 '''
 Map HNF address hash value to HNFNODEID
 '''
 mcu_mask_snf_mode1 = [0x01, 0x02, 0x04, 0x08, 0x06, 0x11, 0x33, 0x77, 0xFF]
 hnf_addr_hash_2_xy_snf_mode1 = {0: 0x01, 1: 0x21, 2: 0x02, 3: 0x22,
-		                 4: 0x03, 5: 0x23, 6: 0x04, 7: 0x24,
-		                 8: 0x51, 9: 0x71, 10: 0x52, 11: 0x72,
-		                 12: 0x53, 13: 0x73, 14: 0x54, 15: 0x74} 
+		                4: 0x03, 5: 0x23, 6: 0x04, 7: 0x24,
+		                8: 0x51, 9: 0x71, 10: 0x52, 11: 0x72,
+		                12: 0x53, 13: 0x73, 14: 0x54, 15: 0x74} 
 
 mcu_mask_snf_mode2 = [0x10, 0xf0, 0x0f]
 hnf_addr_hash_2_xy_snf_mode2 = {0: 0x01, 1: 0x21, 2: 0x51, 3: 0x71,
@@ -191,6 +226,7 @@ def init_mcu_to_hnf():
   global mcu_mask
   global addrhash_2_mcu
   global snfhash_2_mcu
+  global snc
 
   '6 channels MCU selected is calculated by mcu_calc_6snf'
   if popcount(mcu_mask) == 6:
@@ -227,16 +263,28 @@ def init_mcu_to_hnf():
       5:[0x0c, 0x0d, 0x1c, 0x1d, 0x0e, 0x0f, 0x1e, 0x1f]
     }
   elif mcu_mask == 0xff:
-    mcu_2_addrhash = {
-      0:[0x00, 0x01, 0x10, 0x11],
-      1:[0x04, 0x05, 0x14, 0x15],
-      2:[0x02, 0x03, 0x12, 0x13],
-      3:[0x06, 0x07, 0x16, 0x17],
-      4:[0x08, 0x09, 0x18, 0x19],
-      5:[0x0c, 0x0d, 0x1c, 0x1d],
-      6:[0x0a, 0x0b, 0x1a, 0x1b],
-      7:[0x0e, 0x0f, 0x1e, 0x1f]
-    }
+    if snc == 1:
+      mcu_2_addrhash = {
+        0:[0x00, 0x01, 0x10, 0x11],
+        1:[0x04, 0x05, 0x14, 0x15],
+        2:[0x02, 0x03, 0x12, 0x13],
+        3:[0x06, 0x07, 0x16, 0x17],
+        4:[0x08, 0x09, 0x18, 0x19],
+        5:[0x0c, 0x0d, 0x1c, 0x1d],
+        6:[0x0a, 0x0b, 0x1a, 0x1b],
+        7:[0x0e, 0x0f, 0x1e, 0x1f]
+      }
+    elif snc == 4:
+      mcu_2_addrhash = {
+        0:[0x00, 0x01, 0x10, 0x11],
+        1:[0x04, 0x05, 0x14, 0x15],
+        2:[0x02, 0x03, 0x12, 0x13],
+        3:[0x06, 0x07, 0x16, 0x17],
+        4:[0x08, 0x09, 0x18, 0x19],
+        5:[0x0c, 0x0d, 0x1c, 0x1d],
+        6:[0x0a, 0x0b, 0x1a, 0x1b],
+        7:[0x0e, 0x0f, 0x1e, 0x1f]
+      }
 
   for mcu,l in mcu_2_addrhash.items():
     for addrhashs in l:
@@ -259,16 +307,26 @@ def snf_hash_calc_6mcu(sa):
   return snf
 
 def steer(sa):
+  global snc
+  if snc == 1:
+    HNF_SELECT = HNF32_SELECT
+    hnf_pair_mask = 0xF
+  elif snc == 2:
+    HNF_SELECT = HNF16_SELECT
+    hnf_pair_mask = 0x7
+  elif snc == 4:
+    HNF_SELECT = HNF8_SELECT
+    hnf_pair_mask = 0x3
   '''
   Hash to the HN-F and then steer to the closet MCU. Should be able to compute the XOR of all bit selects at the same time
   as they are in 5-bit chunks (e.g. XOR [10:6], [15:11],... [47:43]). 
   '''
   addr_hash = 0
-  for i in range(len(HNF32_SELECT)):
-      addr_hash |= xor_div(sa & HNF32_SELECT[i], 64) << i
+  for i in range(len(HNF_SELECT)):
+      addr_hash |= xor_div(sa & HNF_SELECT[i], 64) << i
   print ('addr hash=0b{addr_hash:05b} '.format(**locals()))
 
-  hnf_pair_select_id = addr_hash & 0xF 
+  hnf_pair_select_id = addr_hash & hnf_pair_mask 
   cal = (addr_hash & 0x10) >> 4
   if mcu_mask in mcu_mask_snf_mode1:
     hnf_addr_hash_2_xy = hnf_addr_hash_2_xy_snf_mode1
@@ -292,6 +350,9 @@ def steer(sa):
     print ('MCU Selected: {mcu:01d}'.format(mcu=addrhash_2_mcu[addr_hash]))
 
 def sa2ma(sa):
+  global snc
+  if snc in [1,2,4]:
+    return sa & 0x7ffffffffff
   """
     Translates SA (system address) to MA (memory address) bit 31 and 39 are the relevant ones for
     regions at 0x0000 8000 0000 (2GB) and 0x0080 8000 0000
@@ -324,26 +385,29 @@ def cut_addr_bit(ma, bit):
   return (msb >> 1) | lsb
 
 def mc_addr_inf(ma):
-  '''
-  Hashing enabled && mcu > 1, strip out SA based on the number of MCUs using 16 HN-Fs:
-  1 None
-  2 [9]
-  4 [9, 8]
-  8 [9, 8, 7]
-  '''
   num_mc = popcount(mcu_mask)
-  if num_mc == 1:
-    lnr_addr = ma
-  elif num_mc == 2:
-    lnr_addr = (((ma >> (9 + 1))) << 9) | (ma & ((1 << 9) - 1))
-  elif num_mc == 4:
-    lnr_addr = (((ma >> (9 + 1))) << 8) | (ma & ((1 << 8) - 1))
-  elif num_mc == 6:
+  if snc in [1,2,4]:
+    strip = { 1:None, 2:(7,7), 4:(8,7), 8:(9,7) }
+    select = num_mc / snc
+  else:
+    '''
+    Hashing enabled && mcu > 1, strip out SA based on the number of MCUs using 16 HN-Fs:
+    1 None
+    2 [9]
+    4 [9, 8]
+    8 [9, 8, 7]
+    '''
+    strip = { 1:None, 2:(9,9), 4:(9,8), 8:(9,7) }
+    select=num_mc
+
+  if num_mc == 6:
     lnr_addr = cut_addr_bit(ma, top_addr_bits2) 
     lnr_addr = cut_addr_bit(lnr_addr, top_addr_bits1) 
     lnr_addr = cut_addr_bit(lnr_addr, top_addr_bits0) 
-  elif num_mc == 8:
-    lnr_addr = (((ma >> (9 + 1))) << 7) | (ma & ((1 << 7) - 1))
+
+  addr_mask_msb = strip[select][0]
+  addr_mask_lsb = strip[select][1]
+  lnr_addr = (((ma >> (addr_mask_msb + 1))) << addr_mask_lsb) | (ma & ((1 << addr_mask_lsb) - 1))
 
   print('lnr_addr (memory addr after shuttered)={lnr_addr:010x}'.format(**locals()))
 
@@ -415,7 +479,7 @@ def mc_addr_inf(ma):
 def main():
   print ('Address routing:')
   print ('---------------------------------------')
-  print ('Configuration: mcu_mask={mcu_mask:02x} Bank hashing={bank_hashing:01d}'.format(mcu_mask=mcu_mask, bank_hashing=bank_hashing))
+  print ('Configuration: snc={snc:01x} mcu_mask={mcu_mask:02x} Bank hashing={bank_hashing:01d}'.format(snc=snc, mcu_mask=mcu_mask, bank_hashing=bank_hashing))
   sa = sys.argv[1]
   init_mcu_to_hnf()
   ma = sa2ma(int(sa, 16))
